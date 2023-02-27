@@ -1,0 +1,355 @@
+---
+title: 'Used car data analysis'
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(error = TRUE,comment=NA) 
+```
+
+# Data description
+
+
+This dataset is part of a larger dataset that has been collected to help to estimate the price of used cars.
+
+It contains the following variables:
+
+- brand (manufacturer)
+- model (of car)
+- year (of registration of the car)
+- price (in GB pounds)
+- transmission (type of gearbox)
+- mileage (total distance covered by the car)
+- fuelType (type of fuel used by the car)
+- tax (annual cost of vehicle tax)
+- mpg (miles per gallon - a measure of fuel efficiency)
+- engineSize (size of the engine in litres)
+
+
+```{r libraries, include=FALSE}
+# load required libraries / additional files
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(gapminder)
+library(corrplot)
+library(flextable)
+library(summarytools)
+library(psych)
+library(RSQLite)
+library(assertr)
+library(readr)
+library(MASS)
+library(performance)
+```
+
+```{r data}
+# load dataset
+used_cars <- read.csv("Used_cars.csv")
+head(used_cars) #checking the first 5 rows of the dataset 
+str(used_cars)  #checking the number of rows and columns in the dataset and the column names along with their data types
+```
+
+
+# Data Preparation 
+
+I'm interested in modelling the price of vehicles that have all of the following properties:
+
+- mileage less than 65000
+- Manual transmission
+- Petrol engine (fuelType)
+- Costing less than £175 in annual Vehicle Tax.
+
+In order to model the price of vehicles, I will filter the dataset to satisfy these conditions by using operators such as 'less than(<)' , 'equals to(==)' , and 'AND(&)'. 
+
+Once I have those rows filtered out, I will use the random number seed function of R to select a random sample of 2000 rows of the data to use in my further analysis. Thereafter, I will sort these row indexes and match the row indexes with their related rows. I will also remove any redundant variables (where only one value remains in that variable) such as 'transmission' and 'fuelType' that won't now bring any meaning to the dataset. Thus, I will now have a subset of the data that will be suitable for analysis. 
+
+```{r dataprep}
+#checking the number of rows of the original dataset
+nrow(used_cars)
+
+#filtering the required conditions 
+filtered_cars <- subset(used_cars, mileage<65000 & transmission == "Manual" & fuelType == "Petrol" & tax<175)
+
+#checking the number of rows that fits the above conditions in the dataset 
+no_of_rows <- nrow(filtered_cars)
+no_of_rows
+
+#using random number seed function to generate random numbers that can be reproduced
+set.seed(21050386)
+
+#selecting 2000 random row indexes to ensure sampling without replacement(by using 'replace = FALSE' )
+sample_row_indx <- sample(1:no_of_rows,2000, replace=FALSE)
+
+#sorting those selected row indexes  
+sample_row_indx <- sort(sample_row_indx)
+
+#matching the row indexes with their related rows 
+sample_data <- filtered_cars[sample_row_indx,]
+
+#getting rid of the redundant variables and creating a new dataframe 
+subset_df <- subset(sample_data, select = -c(transmission,fuelType) )
+
+#checking to see the first 5 rows and the total number of rows in the of the new dataframe
+head(subset_df)
+nrow(subset_df)
+```
+
+
+# Exploratory Data Analysis 
+
+## Descriptive Statistics
+
+The variables 'brand', 'model' and 'year' can be identified as the categorical variables because they have finite set of values that can be categorized. The variable 'year' was not classified as a continuous variable as it would be meaningless to do calculations with it. The variables 'price', 'mileage', 'tax', 'mpg' and 'engineSize' can identified as the continuous variables in the dataset. 
+
+For continuous variables, the 'summary()' and 'str()' functions can be used to see the summary statistics (min, max, mean and the quartiles) and the structure(the number of rows and columns in the dataset and the column names along with their data types) of the dataset respectively. Further, a flextable with certain statistics can be designed to make the table easier to read.  
+For categorical variables, the mode of certain variables can be found. By using a contingency table, comparison between two variables can be done. These methods will be able to gain insights. 
+
+```{r DescriptiveStats}
+
+#viewing the summary statistics(min, max, mean and the quartiles) of the continuous variables
+summary(subset_df)
+#viewing the number of rows and columns in the dataset and the column names along with their data types
+str(subset_df)
+```
+
+The str() function shows the structure of the dataset where there are 2000 observations with 8 variables and the data type of each of those varaibles. Valuable insights of the continuous variables using the minimum value, maximum value, mean and quartiles of the summary statistics was gained. It can be seen that the dataset involved used cars registered between the years 2006 to 2020. For a used car, the prices was of average(mean) £12,210 and ranging from £2,250 to £46,000. Another important factor that people usually consider in a used car is the mileage. The mean mileage of a used car in this dataset is 18,868. Similar summary statistics and interpretations can be derived for all other variables. 
+
+Also, we can check if there are any outliers by comparing the difference between the mean and median as mean takes into account the outliers while median does not. The difference is not that significant hence we can conclude there may not be any outliers in the dataset.
+
+```{r}
+#viewing the summary statistics 
+Summary_Stats<-round(describe(subset_df[,c(4:8)]),2)
+
+#viewing the specified statistics that is mentioned below
+Summary_Stats<-Summary_Stats[,c("min","median","mean","max","sd")]
+Summary_Stats<-cbind(rownames(Summary_Stats),Summary_Stats)
+colnames(Summary_Stats)[1]<-"Variable"
+flextable(Summary_Stats)
+```
+
+A flextable was used to view the statistics in an easier way. Further, the minimum values for tax and engine size appears to be zero which is not realistic. It can be due to any errors that were involved in entering the data or a problem with the recording machine. 
+
+```{r}
+#getting the mode of the variable 'brand' and sorting the results in descending order
+sort(table(subset_df$brand), decreasing = TRUE)
+```
+
+The mode of the variable brand was obtained after sorting the values in descending order. It was seen that the brand 'Ford' has the highest used car count while the brand 'Mercedes' had the lowest.
+
+```{r}
+#comparing two of the categorical variables using a contingency table
+with(subset_df,{table(year,brand)})
+```
+
+The variable year and the variable brand was compared using a contingency table. According to the contingency table, the number of used cars has risen significantly from the year 2013 for each brand of cars. There seems to be a slight reduction of the number of used cars for the year 2020 for each brand of cars. 
+
+
+## Exploratory Graphs
+
+The dependent variable for this dataset can be the price since it is the outcome that we are trying to estimate and it depends on all the other variables.
+
+For exploratory graphs, a bar chart can be used to show the relationship between the number of used cars in different brands for each year of registration. A histogram can be plotted to see the distribution of a continuous variable like miles per gallon(mpg) and it's number of observations. It would be interesting to see the relationship between the variables, brand and miles per gallon. For this, a column chart can be used to plot a categorical variable(brand) on the x-axis and a continuous variable (miles per gallon(mpg)) on the y-axis and see the distrbution. Also, boxplots could be plotted between variables like brand and price which will be useful in detecting the skewness of the dataset.Since this analysis involves a large dataset, when plotting a scatter plot, the points may overlap one another and pile up, hence would not be very useful. However, a scatter plot can be split into subplots from 'facet_wrap()' using a categorical variable which will show each subset of data. Using this way, a scatter plot between the brand of the used cars and price can be plotted.
+
+```{r ExploratoryGraphs}
+#bar chart
+ggplot(subset_df, aes(year,fill=brand))+               
+  stat_count()+
+  labs(title= "Number of observations in different brands VS registration year",
+      tag="Figure 1")+
+  xlab("Registration year")+
+  ylab("Frequency")+
+  theme_bw()
+```
+
+As per Figure 1, the number of used cars from being almost zero have increased over the years from 2013 till 2016 and a sharp increase was recorded from the years 2016 to 2017. The year 2017 recorded the highest number of used cars with the majority of the cars being 'Ford'. Thereafter, there is a slight decrease of the number of used cars in the years with a sharp decrease in the year 2020 which maybe due to the impact of Covid-19 virus hitting all over the world.
+
+```{r}
+#histogram
+ggplot(subset_df)+               
+  geom_histogram(mapping = aes(x=mpg),fill="red",bins=15,boundary=0)+
+  labs(title= "Distribution of miles per gallon",
+      tag="Figure 2")+
+  xlab("Miles per gallon(mpg)")+
+  ylab("Frequency")+
+  theme_bw()
+```
+
+Figure 2 shows a histogram where the data for the variable, miles per gallon seems to be negatively skewed. There is a drastic drop between 60 to 70 miles per gallon.
+
+```{r}
+#column chart
+ggplot(subset_df, aes(x=brand,y=mpg))+               
+  geom_col(width=0.5)+
+  labs(title= "Distribution of miles per gallon for different brands",
+      tag="Figure 3")+
+  xlab("Brand")+
+  ylab("Miles per gallon(mpg)")+
+  theme_bw()
+```
+
+Figure 3 shows a column chart between the variables brand and miles per gallon. A higher miles per gallon indicates a lower fuel consumption, hence it can be seen that the brand 'Ford' has the most efficient fuel consumption since it has the highest miles per gallon. 
+
+```{r}
+#boxplot
+ggplot(data = subset_df, mapping = aes(x = brand, y = price)) +
+  geom_boxplot()+
+  labs(title= "Brand Vs Price of used cars",
+      tag="Figure 4")+
+  xlab("Brand")+
+  ylab("Price")+
+  theme_bw()
+```
+
+Figure 4 shows a boxplot where 'Audi' seems to be positively skewed while 'BMW','Mercedes' and 'Toyota' seems to be almost symmetrical. 'BMW' seems to have 2 gross outliers. The prices seems to be lower for 'Toyota' however, 'Toyota' seems to have the lowest interquartile range.
+
+```{r}
+#sub scatter plots
+ggplot(subset_df, aes(x=mileage, y=price))+
+  geom_point()+
+  facet_wrap(~brand,nrow=2)+                        
+  labs(title= "Mileage Vs price of used cars for different brands",
+      tag="Figure 5")+
+  xlab("Mileage")+
+  ylab("Price")+
+  theme_bw()
+```
+
+Figure 5 shows subplots where the distribution between the variable price and mileage was measured for each brand of used cars. All the plots show a negative slope which means that as mileage increases the price decreases.
+
+The brand 'Ford' was identified as the mode in the descriptive statistics done above, which explains the majority of the used cars being 'Ford'. This could be because of a sampling bias. Since skewness for certain graphs were detected, there can be outliers and it might affect the model in terms of performance later on. 
+
+## Correlations
+
+```{r linearcor}
+#creating a new dataframe which includes only the continuous variables
+newsubset_df <- subset_df[c(4:8)]
+#viewing the correlation matrix
+cor(newsubset_df)
+```
+
+```{r}
+#plotting a corrplot to see the variables which are strongly related
+corrplot(cor(newsubset_df))
+```
+
+```{r}
+#viewing the correlation between the dependent variable with each of the other variables
+cor(newsubset_df)[-1,1]
+
+#viewing the variable that has the strongest correlation with the dependent variable
+names(which.max(abs(cor(newsubset_df)[-1,1])))
+```
+
+
+# Bivariate relationship 
+
+The explanatory variable 'mpg' has the strongest linear relationship with the dependent variable, 'price' as it has a higher correlation coefficient(-0.605)than other explanatory variables.
+
+```{r model1}
+#creating a linear model to model the relationship between price and mpg
+model1 <- lm(price ~ mpg, data=newsubset_df)  
+summary(model1)
+```
+
+The linear regression equation for the above model is price = 32500.05 + -359.75*mpg 
+
+When miles per gallon is theoretically zero, the price is £32500.05. For every unit increase in miles per gallon, the price decreases by £359.75. Both the intercept and gradient coefficients are significant as their p values are less than 0.05(which can be seen from the stars). Since their p-values are very low, we can reject the null hypothesis and conclude that miles per gallon influences the price of a used car.
+The negative correlation between miles per gallon and price maybe because in real world people may assume that a used vehicle with a higher miles per gallon is of high mileage too. A higher mileage will reduce the price of the vehicle hence justifying the negative relationship between miles per gallon and price. 
+
+# Model Performance
+
+```{r model1performance}
+check_model(model1)
+check_model(model1,check="normality")             #to get the normal density plot 
+```
+
+The 'linearity' graph derived from the 'checkmodel()' function checks the overall model fit and the validity of model assumptions. It shows an almost flat line so it can be assumed that the variables have a linear relationship. The assumption that the residuals are linear is appropriate as an almost flat line can be seen from the 'Homogeneity of Variance' graph. By checking the 'normality of residuals' normal density plot, the distribution is close to a normal curve. None of the points are out of the contour lines, indicating that there are no influential observations. All of these results imply that no further model adjustments are needed.
+Nevertheless, it can be observed that there are a few number of points that has not fallen along the line implying that the model does not predict well for these points. Therefore model adjustments relating to these points maybe needed. 
+
+R-squared measures how well the model fits the actual data. A R-squared of 0.366 (which is obtained from part b. above) implies that the independent variables(mpg) explains 36.6% of variation in price. 
+
+## Bootstrap
+
+Using bootstrapping on this model to obtain a 95% confidence interval of the estimate of the slope parameter.
+
+```{r bootstrap}
+# Setting up bootstrap
+Nbootstrap<- 1000 
+coeff_mpg <-rep(NA,Nbootstrap)    #creating an empty vector
+
+
+#performing the bootstrap
+set.seed(210)                   #setting a seed to make the sample reproducible 
+for(i in seq_len(Nbootstrap)){
+  usevalues<-sample(seq_along(newsubset_df$price),size=length(newsubset_df$price),replace=TRUE)
+  bootstrap.sample<- newsubset_df[usevalues,]
+  model_b <- lm(price ~ mpg, data=bootstrap.sample) 
+  model_boot <- stepAIC(model_b, trace=FALSE)    
+  coeff_mpg[i] <-model_boot$coef["mpg"]          
+}
+
+# Setting all the missing values to zero
+coeff_mpg[is.na(coeff_mpg)] <- 0   
+
+#plotting a histogram
+Bootstrap <- data.frame(Coefficient=coeff_mpg)
+ggplot(Bootstrap, aes(x=Coefficient)) + geom_histogram(aes(y = after_stat(density)),binwidth = .5)+
+  geom_density()+
+ggtitle("Bootstrapped Coefficients for miles per gallon(mpg)")+
+theme_bw()
+
+# 95% bootstrap confidence interval
+quantile(coeff_mpg,c(.025,0.975))                    
+```
+
+# Multivariable relationship 
+
+Creating a model with all of the appropriate remaining explanatory variables included:
+
+```{r model2}
+#creating a linear model to model the relationship between price and all other explanatory variables
+model2 <- lm(price ~., data=newsubset_df)   
+summary(model2)
+```
+
+When all independent variables are theoretically zero, the price is £2.291e+04.
+For every unit increase in mileage, the price decreases by £1.481e-01. 
+For every unit increase in tax, the price increases by £4.423e+00. 
+For every unit increase in mpg, the price decreases by £2.174e+02. 
+For every unit increase in engineSize, the price increases by £3.213e+03. 
+
+The coefficients for the intercept, 'mileage', 'tax', 'mpg' and 'engineSize' are significant as their p-values are less than 0.05 as indicated by the stars. Similarly the overall model is significant too. Since their p-values are very low, we can reject the null hypothesis and conclude that all the independent variables together influences the price of a used car.
+A R-squared of 0.5372 implies that all the independent variables explains 53.72% of variation in price. However, when doing multiple regression, R-squared will increase as more variables are added. Therefore, the Adjusted R-squared is the preferred measure since it adjusts for the number of variables considered. 
+The Adjusted R-squared for this model is 0.5363 which explains the extra variation in the model after having other independent variables included.
+
+# Model Performance
+
+```{r model2performance}
+check_model(model2)
+check_model(model2,check="normality")
+```
+
+A R-squared of 0.5372 (which is obtained from part a. above) implies that all the independent variables explains 53.72% of variation in price. However, when doing multiple regression, R-squared will increase as more variables are added. Therefore, the Adjusted R-squared is the preferred measure since it adjusts for the number of variables considered. 
+The Adjusted R-squared for this model is 0.5363 which explains the extra variation in the model after having other independent variables included.
+
+The 'linearity' graph derived by using the 'checkmodel()' function checks the overall model fit and the validity of model assumptions and it shows an almost flat line so it can be assumed that the independent variables together have a linear relationship with price. The assumption that the residuals are linear is likely appropriate as an almost flat line can be seen from the 'Homogeneity of Variance' graph. By checking the 'normality of residuals' normal density plot, the distribution is close to a normal curve. A slight positive skewness in the graph can also be seen as the tail is longer towards the positive side. Additionally, the 'Collinearity' graph shows there's no issue of multicollinearity and so the independent variables are not strongly related with each other. None of the points are out of the contour lines, implying that there are no influential observations. All of these results imply that no further model adjustments are needed.
+Nevertheless, it can be observed that there are a few number of points that has not fallen along the line implying that the model does not predict well for these points. Hence adjustments to the model in relation with these points maybe needed. 
+
+# General concerns regarding this model
+ 
+Linear regression follows the assumption of linearity between the dependent variable and the independent variables. This can be a problem in real world as data is rarely linearly separable. Also, if there are any input errors or the data distribution is not properly balanced or if any missing values were not removed before implementing the model, it can negatively affect the validity of the model.
+
+# A Report to a client 
+
+Considering a scenario where a client is looking to purchase a used VW Polo (registration year either 2018 or 2019, manual transmission, petrol engine) and wants to understand what factors influence the expected price of a used car, (and how they influence the price) I have written a report to the client. This report includes an explanation as to which statistical model I would recommend, and why I have selected that statistical model. 
+
+Report:
+The used car dataset applied in this model was arrived at using a few conditions which include the requirements you desire where the transmission was manual and the fuel type was petrol. The registration year was from 2006 to 2020. One of the explanatory graphs used in the analysis showed that there were many used cars registered during the years, 2018 and 2019 while the highest registered during 2017. There were five different brands(Ford, Toyota, Audi, BMW and Mercedes)used in the dataset. Even though the brand 'VW Polo' is not available as a brand in this dataset, it can be compared with other brands and arrive at a conclusion based on their results. Further, summary statistics such as mean, median, quartiles, minimum and maximum can be checked for price of the used cars or any of the continuous variables in the model. 
+
+There are several factors that affect the price of a used car. The second multiple regression model(model2) may be a better fit to explore these factors as it includes all the independent variables such as the mileage, engine size, miles per gallon and tax. It also has a higher value for multiple R-squared. With the use of a correlation matrix, it was seen that the higher the mileage and miles per gallon, the lower the price of a used car. Also, when the engine size and the amount of tax increases, the price of a used car will also increase.  
+
+A few suggestions for alteration to the model can be to add a sample of used car data relating to the brand 'VW Polo'. This will result in a better and more appropriate analysis. Further, since the model(model2) I derived had the registration years from 2006 to 2020, but you wanted specifically for the years 2018 or 2019, I would recommend plotting either a bar chart or a box plot for those years. 
